@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+{ set +x; } 2>/dev/null
+
+# generate Google Chrome extensions .json
+# External Extensions/id.json
+# External Extensions/WEBLOC/name.webloc
+IFS=
+path=~/"Library/Application Support/Google/Chrome/Default/Extensions"
+! [ -e "$path" ] && echo "ERROR: ${path/$HOME/\~} NOT EXISTS" && exit 1
+
+find="$(find "$path" -name "manifest.json" -mindepth 3 -maxdepth 3)"
+[[ -z "$find" ]] && echo "SKIP: manifest.json NOT FOUND" && exit 0
+while IFS= read json; do
+	set "${json%/*/*}"
+	id="${1##*/}"
+	name="$(cat "$json" | jq -r '.name')"
+	url="https://chrome.google.com/webstore/detail/$id"
+	[[ $name == "__MSG"* ]] && {
+		# https://chrome.google.com/webstore/detail/id
+		# redirected to:
+		# https://chrome.google.com/webstore/detail/name/id
+		redirect="$(curl -w "%{url_effective}\n" -I -L -s -S "$url" -o /dev/null)"
+		IFS='/';set $redirect;IFS=
+		name="${6//\-/ }"
+	}
+	update_url="$(cat "$json" | jq -r '.update_url')"
+
+	# json=~/"Library/Application Support/Google/Chrome/External Extensions/$id.json"
+	json="$PWD/$id.json"
+	cat <<EOF > "$json"
+{
+	"name": "$name",
+	"url": "$url",
+ 	
+ 	"external_update_url": "$update_url"
+}
+
+EOF
+	webloc="${json%/*}/WEBLOC/$name".webloc
+	! [ -e "$webloc" ] && {
+		! [ -e "${webloc%/*}" ] && { ( set -x; mkdir "${webloc%/*}" ) || exit; }
+		( set -x; /usr/libexec/PlistBuddy -c "Add URL string '$url'" "$webloc" ) || exit
+	}
+done <<< "$find"
+
+# find deleted extensions
+path=~/"Library/Application Support/Google/Chrome/External Extensions"
+find="$(find "$path" -name "*.json" -maxdepth 1)"
+while IFS= read json; do
+	basename="${json##*/}"
+	IFS='.';set $basename;IFS=
+	id="$1"
+	path=~/"Library/Application Support/Google/Chrome/Default/Extensions"/"$id"
+	! [ -e "$path" ] && echo "$path NOT EXISTS"
+done <<< "$find"
+:

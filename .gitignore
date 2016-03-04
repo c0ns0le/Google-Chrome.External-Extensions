@@ -1,0 +1,7 @@
+.github
+.make.command
+.open -a Terminal "$PWD"
+.open .
+.README
+dotfiles/.files.fix.command
+publicfiles/.files.fix.command
